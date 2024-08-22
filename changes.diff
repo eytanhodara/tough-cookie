@@ -1,0 +1,84 @@
+diff --git a/lib/memstore.js b/lib/memstore.js
+index d2b915c..26797a9 100644
+--- a/lib/memstore.js
++++ b/lib/memstore.js
+@@ -36,7 +36,7 @@ var util = require('util');
+ 
+ function MemoryCookieStore() {
+   Store.call(this);
+-  this.idx = {};
++  this.idx = Object.create(null);
+ }
+ util.inherits(MemoryCookieStore, Store);
+ exports.MemoryCookieStore = MemoryCookieStore;
+@@ -47,7 +47,7 @@ MemoryCookieStore.prototype.synchronous = true;
+ 
+ // force a default depth:
+ MemoryCookieStore.prototype.inspect = function() {
+-  return "{ idx: "+util.inspect(this.idx, false, 2)+' }';
++  return "[Object: null prototype] { idx: "+util.inspect(this.idx, false, 2)+' }';
+ };
+ 
+ // Use the new custom inspection symbol to add the custom inspect function if
+@@ -115,11 +115,12 @@ MemoryCookieStore.prototype.findCookies = function(domain, path, cb) {
+ 
+ MemoryCookieStore.prototype.putCookie = function(cookie, cb) {
+   if (!this.idx[cookie.domain]) {
+-    this.idx[cookie.domain] = {};
++    this.idx[cookie.domain] = Object.create(null);
+   }
+   if (!this.idx[cookie.domain][cookie.path]) {
+-    this.idx[cookie.domain][cookie.path] = {};
++    this.idx[cookie.domain][cookie.path] = Object.create(null);
+   }
++  
+   this.idx[cookie.domain][cookie.path][cookie.key] = cookie;
+   cb(null);
+ };
+@@ -150,7 +151,7 @@ MemoryCookieStore.prototype.removeCookies = function(domain, path, cb) {
+ };
+ 
+ MemoryCookieStore.prototype.removeAllCookies = function(cb) {
+-  this.idx = {};
++  this.idx = Object.create(null);
+   return cb(null);
+ }
+ 
+diff --git a/test/cookie_jar_test.js b/test/cookie_jar_test.js
+index 67809b9..9f376d1 100644
+--- a/test/cookie_jar_test.js
++++ b/test/cookie_jar_test.js
+@@ -541,4 +541,31 @@ vows
+       }
+     }
+   })
++  .addBatch({
++    "Issue Prototype pollution": {
++      "when setting a cookie with the domain __proto__": {
++        topic: function() {
++          const jar = new tough.CookieJar(undefined, {
++            rejectPublicSuffixes: false
++          });
++          // try to pollute the prototype
++          jar.setCookieSync(
++            "Slonser=polluted; Domain=__proto__; Path=/notauth",
++            "https://__proto__/admin"
++          );
++          jar.setCookieSync(
++            "Auth=Lol; Domain=google.com; Path=/notauth",
++            "https://google.com/"
++          );
++          this.callback();
++        },
++        "results in a cookie that is not affected by the attempted prototype pollution": function() {
++          const pollutedObject = {};
++          assert(pollutedObject["/notauth"] === undefined);
++        }
++      }
++    }
++  })
++  
++  
+   .export(module);
+
+// 
